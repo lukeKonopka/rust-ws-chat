@@ -32,7 +32,6 @@ impl ConnectedUser {
     let msg = msg.into_text()?;
     let message_content = format!("[{}] {}", from.username, msg);
     let message = Message::text(message_content);
-    // from.send_msg(self, message.clone())?;
     self.sender.send(message)
   }
 }
