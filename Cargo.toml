@@ -5,3 +5,4 @@ authors = ["Luke Konopka <luke@lukekonopka.pl>"]
 edition = "2018"
 
 [dependencies]
+ws = "0.8.0"
