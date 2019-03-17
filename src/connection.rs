@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 use ws::{Factory, Handler, Handshake, Message, Result, Sender};
 
@@ -37,13 +38,13 @@ impl ConnectedUser {
 }
 
 pub struct ConnectionFactory {
-  connected_users: Rc<ConnectedUsers>,
+  connected_users: Rc<RefCell<ConnectedUsers>>,
 }
 
 impl Default for ConnectionFactory {
   fn default() -> Self {
     ConnectionFactory {
-      connected_users: Rc::new(ConnectedUsers { list: vec![] }),
+      connected_users: Rc::new(RefCell::new(ConnectedUsers { list: vec![] })),
     }
   }
 }
@@ -52,19 +53,21 @@ impl Factory for ConnectionFactory {
   type Handler = ClientHandler;
 
   fn connection_made(&mut self, sender: Sender) -> ClientHandler {
-    // TODO: make this work with many connections
-    let m = Rc::get_mut(&mut self.connected_users).expect("cannot get_mut connected_users");
-    m.register_user(ConnectedUser::create("anon".into(), &sender));
+    let mut connected = self
+      .connected_users
+      .try_borrow_mut()
+      .expect("cannot borrow connected_users mutably");
+    connected.register_user(ConnectedUser::create("anon".into(), &sender));
     ClientHandler::create(&self.connected_users)
   }
 }
 
 pub struct ClientHandler {
-  connected_users: Rc<ConnectedUsers>,
+  connected_users: Rc<RefCell<ConnectedUsers>>,
 }
 
 impl ClientHandler {
-  fn create(connected_users: &Rc<ConnectedUsers>) -> Self {
+  fn create(connected_users: &Rc<RefCell<ConnectedUsers>>) -> Self {
     ClientHandler {
       connected_users: connected_users.clone(),
     }
@@ -77,8 +80,11 @@ impl Handler for ClientHandler {
   }
 
   fn on_message(&mut self, msg: Message) -> Result<()> {
-    let user = self
+    let connected = self
       .connected_users
+      .try_borrow()
+      .expect("was unable to borrow connected_users");
+    let user = connected
       .get_user("anon".into())
       .expect("cannot find user anon");
 
