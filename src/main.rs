@@ -1,9 +1,9 @@
-mod connection;
+mod message;
+mod server;
 
-use self::connection::ConnectionFactory;
+use self::server::WsServer;
 
 fn main() {
-    let factory = ConnectionFactory::default();
-    let ws = ws::WebSocket::new(factory).expect("cannot create websocket");
+    let ws = ws::WebSocket::new(WsServer::default()).expect("cannot create websocket");
     ws.listen("127.0.0.1:8000").unwrap();
 }
