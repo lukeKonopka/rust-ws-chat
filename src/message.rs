@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum SocketMessage {
   Message {
     from: String,
@@ -18,11 +19,13 @@ pub enum SocketMessage {
   Users {
     list: Vec<String>,
   },
-  Error(MessageError),
+  Error {
+    err: MessageError,
+  },
 }
 
 impl SocketMessage {
-  fn from_ws_message(msg: ws::Message) -> Result<Self, MessageError> {
+  pub fn from_ws_message(msg: ws::Message) -> Result<Self, MessageError> {
     let text_msg = ws::Message::into_text(msg)?;
     let socket_msg: SocketMessage = serde_json::from_str(&text_msg)?;
     Ok(socket_msg)
@@ -42,12 +45,18 @@ impl SocketMessage {
     }
   }
 
-  fn error(msg: &str) -> Self {
-    SocketMessage::Error(MessageError { msg: msg.into() })
+  pub fn error(msg: &str) -> Self {
+    SocketMessage::Error {
+      err: MessageError { msg: msg.into() },
+    }
+  }
+
+  pub fn me(name: &str) -> Self {
+    SocketMessage::Me { name: name.into() }
   }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct MessageError {
   pub msg: String,
 }

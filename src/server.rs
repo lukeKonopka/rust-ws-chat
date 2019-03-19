@@ -1,6 +1,7 @@
 use crate::message::{MessageError, SocketMessage};
 use std::cell::RefCell;
 use std::rc::Rc;
+use uuid::Uuid;
 use ws::{Factory, Handler, Handshake, Message, Sender};
 
 struct ConnectedUsers {
@@ -25,10 +26,16 @@ impl ConnectedUsers {
     dest_sender.send(ws_msg)?;
     Ok(())
   }
+
+  fn change_username(&mut self, id: Uuid, new_username: String) {
+    let user = self.list.iter_mut().find(|user| user.id == id).unwrap();
+    user.change_name(new_username);
+  }
 }
 
 #[derive(Clone)]
 struct ConnectedUser {
+  id: Uuid,
   username: String,
   sender: Sender,
 }
@@ -36,9 +43,14 @@ struct ConnectedUser {
 impl ConnectedUser {
   fn create(username: String, sender: &Sender) -> Self {
     ConnectedUser {
+      id: Uuid::new_v4(),
       username,
       sender: sender.clone(),
     }
+  }
+
+  fn change_name(&mut self, new_name: String) {
+    self.username = new_name;
   }
 }
 
@@ -63,7 +75,7 @@ impl Factory for WsServer {
       .try_borrow_mut()
       .expect("cannot borrow connected_users mutably");
     let connected_user = ConnectedUser::create("anon".into(), &sender);
-    connected.register_user(connected_user);
+    connected.register_user(connected_user.clone());
     ClientHandler::create(&self.connected_users, &connected_user)
   }
 }
@@ -84,10 +96,37 @@ impl ClientHandler {
 
 impl Handler for ClientHandler {
   fn on_open(&mut self, _: Handshake) -> ws::Result<()> {
-    Ok(())
+    self.me.sender.send(
+      SocketMessage::into_ws_message(SocketMessage::me(&self.me.username))
+        .ok()
+        .unwrap(),
+    )
   }
 
   fn on_message(&mut self, msg: Message) -> ws::Result<()> {
-    user.send_msg(&user, msg)
+    let parsed_msg = SocketMessage::from_ws_message(msg);
+    let mut connected = self
+      .connected_users
+      .try_borrow_mut()
+      .expect("cannot borrow connected_users");
+    match parsed_msg {
+      Ok(socket_msg) => match socket_msg {
+        SocketMessage::RequestMe => {
+          connected
+            .send(
+              self.me.username.clone(),
+              SocketMessage::me(&self.me.username),
+            ).unwrap();
+          Ok(())
+        }
+        SocketMessage::SetName { name } => {
+          connected.change_username(self.me.id, name.clone());
+          self.me.change_name(name.clone());
+          Ok(())
+        }
+        _ => Ok(()),
+      },
+      Err(message_error) => panic!("on_message Error: {}", message_error.msg),
+    }
   }
 }
